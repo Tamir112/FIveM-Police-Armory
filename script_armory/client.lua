@@ -8,111 +8,116 @@
 
 
 
+-- DO NOT EDIT BELOW THIS IF YOU DO NOT KNOW WHAT YOU ARE DOING !! --
 
+local closestArmory = { -- Closest armory to the player
+    loc = {},
+    isInMarker = false
+}
 
-
-
--- DO NOT EDIT BELOW THIS IF YOU DO NOT KNOW WHAT YOU ARE DOING !! -- 
--- DO NOT EDIT BELOW THIS IF YOU DO NOT KNOW WHAT YOU ARE DOING !! -- 
--- DO NOT EDIT BELOW THIS IF YOU DO NOT KNOW WHAT YOU ARE DOING !! -- 
--- DO NOT EDIT BELOW THIS IF YOU DO NOT KNOW WHAT YOU ARE DOING !! -- 
-
-
-
-
-
-
-Citizen.CreateThread(function ()
-   
+Citizen.CreateThread(function()
     while true do
-           Citizen.Wait(1)
-           local ped = GetPlayerPed(-1)
-   
-                   local coords =  GetEntityCoords(ped)
-   
-   
-                   for _,location in ipairs(Config.Stations) do
-                       g1 = {
-                           x=location[1][1],
-                           y=location[1][2],
-                           z=location[1][3],
-                           
-                       }
-                       if Config.Marker then
-                      DrawMarker(1, g1.x, g1.y, g1.z, 0, 0, 0, 0, 0, 0, 1.501, 1.5001, 0.5001, 255,0,0, 200, 0, 0, 0, 0)
-                       end
-                       if CheckPos(coords.x, coords.y, coords.z, g1.x, g1.y, g1.z, 2) then 
-                               alert(Config.Message)
-                               if IsControlJustPressed(1, Config.Keybind) then 
-                              RemoveAllPedWeapons(GetPlayerPed(-1), true)
+        Citizen.Wait(1000)
 
-                              for _,weapon in ipairs(Config.Weapons) do
-                                giveWeapon(weapon)
+        local ped = PlayerPedId()
+        local coords = GetEntityCoords(ped)
+
+        local lowestDist = Config.Marker.DrawDistance -- Set the lowest distance to the max distance
+
+        for _,armory in pairs(Config.Armories) do -- Loop through all armories
+            local distance = #(coords - vector3(armory.x, armory.y, armory.z)) -- Get distance between player and armory
+            if distance < lowestDist then -- If distance is lower than the lowest distance
+                closestArmory.loc = armory -- Set the closest armory to the current armory
+                lowestDist = distance -- Set the lowest distance to the current distance
+
+                if distance < Config.Marker.Radius then -- If distance is lower than the radius
+                    closestArmory.isInMarker = true -- Set isInMarker to true
+                else -- If distance is higher than the radius
+                    closestArmory.isInMarker = false -- Set isInMarker to false
+                end
+            end
+        end
+
+        if lowestDist == Config.Marker.DrawDistance then -- If the lowest distance is the default distance
+            closestArmory.loc = {} -- Set the closest armory to an empty table
+        end
+    end
+end)
+
+Citizen.CreateThread(function()
+    local letSleep
+
+    while true do
+        Citizen.Wait(0)
+        letSleep = true
+
+        if closestArmory.loc ~= {} then -- If the closest armory is not empty
+            letSleep = false
+
+            local markerScale = Config.Marker.Scale
+            local markerColor = Config.Marker.Color -- {r, g, b, a}
+
+            DrawMarker(1, closestArmory.loc.x, closestArmory.loc.y, closestArmory.loc.z, 0, 0, 0, 0, 0, 0, markerScale.x, markerScale.y, markerScale.z, markerColor.r, markerColor.g, markerColor.b, markerColor.a, false, false, 2, false, nil, nil, false)
+
+            if closestArmory.isInMarker then -- If we're in the marker, we can interact with the armory
+                ShowAlert(Config.Message) -- Show the message
+
+                if IsControlJustPressed(0, Config.Keybind) then -- If we press the keybind
+                    local ped = PlayerPedId() -- Get the player ped
+
+                    RemoveAllPedWeapons(ped, true) -- Remove all weapons
+
+                    for _,weapon in ipairs(Config.Weapons) do -- Give the player weapons
+                        giveWeapon(ped, weapon)
+                    end
+
+                    for _,comp in ipairs(Config.Components) do -- Give the player components
+                        weaponComponent(ped, comp.weapon, comp.component)
+                    end
+
+                    if Config.Armor then -- Give the player armor
+                        AddArmourToPed(ped, 100)
+                    end
+
+                    ShowNotification("~g~Police loadout has been loaded.")
+                end
+            end
+        end
+
+        if letSleep then
+            Citizen.Wait(1000) -- If we're not in render distance of an armory, we can sleep
+        end
+    end
+end)
+
+Citizen.CreateThread(function() -- Garbage collection thread
+    while true do
+        Citizen.Wait(10000)
+
+        collectgarbage()
+    end
+end)
 
 
-                              end
-
-                              for _,comp in ipairs(Config.Components) do
-                                weaponComponent(comp[1], comp[2])
-                               
-
-                              end
-                        if Config.armor then
-                              AddArmourToPed(GetPlayerPed(-1), 100)
-                        end
-
-
-
-                              ShowNotification("~g~Police loadout has been loaded.")
-                            
-                            end
-                       end
-                   
-               end
-           end
-       
-       
-   end)
-
-
-
-
-
-
-
-   function CheckPos(x, y, z, cx, cy, cz, radius)
-    local t1 = x - cx
-    local t12 = t1^2
-
-    local t2 = y-cy
-    local t21 = t2^2
-
-    local t3 = z - cz
-    local t31 = t3^2
-
-    return (t12 + t21 + t31) <= radius^2
-end
-
-
-function alert(msg)
-    SetTextComponentFormat("STRING")
-    AddTextComponentString(msg)
-    DisplayHelpTextFromStringLabel(0,0,1,-1)
+function ShowAlert(msg)
+    BeginTextCommandDisplayHelp("STRING")
+    AddTextComponentSubstringPlayerName(msg)
+    EndTextCommandDisplayHelp(0, false, true, -1)
 end
 
 function ShowNotification(text)
-    SetNotificationTextEntry("STRING")
-    AddTextComponentString(text)
-    DrawNotification(false, false)
+    BeginTextCommandThefeedPost("STRING")
+    AddTextComponentSubstringPlayerName(text)
+    EndTextCommandThefeedPostTicker(false, false)
 end
 
-  
-  function giveWeapon(hash)
-    GiveWeaponToPed(GetPlayerPed(-1), GetHashKey(hash), 100, false, true)
-  end
-  
-  function weaponComponent(weapon, comp)
-    if HasPedGotWeapon(GetPlayerPed(-1), GetHashKey(weapon), false) then
-        GiveWeaponComponentToPed(GetPlayerPed(-1), GetHashKey(weapon), GetHashKey(comp))
+
+function giveWeapon(ped, hash)
+    GiveWeaponToPed(ped, hash, 100, false, false)
+end
+
+function weaponComponent(ped, weapon, comp)
+    if HasPedGotWeapon(ped, weapon, false) then
+        GiveWeaponComponentToPed(ped, weapon, comp)
     end
-  end
+end
